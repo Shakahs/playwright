@@ -17,6 +17,8 @@
 // - This file is used to execute 'npx playwright install-deps'
 // - The reverse mappings "lib2package" are generated with the following script:
 //     ./utils/linux-browser-dependencies/run.sh ubuntu:20.04
+// - Entries for RHEL-family platforms (fedora-*) use dnf/rpm package names
+//   resolved with `dnf provides */<libname>`. Only chromium is currently mapped.
 
 export const deps: any = {
   'ubuntu20.04-x64': {
@@ -1195,6 +1197,83 @@ export const deps: any = {
       'libXrandr.so.2': 'libxrandr2',
       'libgtk-4.so.1': 'libgtk-4-1',
     }
+  },
+};
+
+deps['fedora-x64'] = {
+  tools: [
+    'xorg-x11-server-Xvfb',
+    'google-noto-color-emoji-fonts',
+    'liberation-fonts-all',
+    'wqy-zenhei-fonts',
+  ],
+  chromium: [
+    'alsa-lib',
+    'at-spi2-atk',
+    'at-spi2-core',
+    'atk',
+    'cairo',
+    'cups-libs',
+    'dbus-libs',
+    'glib2',
+    'gtk3',
+    'libdrm',
+    'libX11',
+    'libX11-xcb',
+    'libXcomposite',
+    'libXdamage',
+    'libXext',
+    'libXfixes',
+    'libXrandr',
+    'libglvnd-egl',
+    'libxcb',
+    'libxkbcommon',
+    'mesa-libgbm',
+    'nspr',
+    'nss',
+    'pango',
+  ],
+  firefox: [],
+  webkit: [],
+  lib2package: {
+    'libasound.so.2': 'alsa-lib',
+    'libatk-bridge-2.0.so.0': 'at-spi2-atk',
+    'libatk-1.0.so.0': 'atk',
+    'libatspi.so.0': 'at-spi2-core',
+    'libcairo.so.2': 'cairo',
+    'libcups.so.2': 'cups-libs',
+    'libdbus-1.so.3': 'dbus-libs',
+    'libdrm.so.2': 'libdrm',
+    'libEGL.so.1': 'libglvnd-egl',
+    'libgbm.so.1': 'mesa-libgbm',
+    'libglib-2.0.so.0': 'glib2',
+    'libgio-2.0.so.0': 'glib2',
+    'libgobject-2.0.so.0': 'glib2',
+    'libgtk-3.so.0': 'gtk3',
+    'libnspr4.so': 'nspr',
+    'libnss3.so': 'nss',
+    'libnssutil3.so': 'nss',
+    'libsmime3.so': 'nss',
+    'libpango-1.0.so.0': 'pango',
+    'libX11.so.6': 'libX11',
+    'libX11-xcb.so.1': 'libX11-xcb',
+    'libxcb.so.1': 'libxcb',
+    'libXcomposite.so.1': 'libXcomposite',
+    'libXdamage.so.1': 'libXdamage',
+    'libXext.so.6': 'libXext',
+    'libXfixes.so.3': 'libXfixes',
+    'libxkbcommon.so.0': 'libxkbcommon',
+    'libXrandr.so.2': 'libXrandr',
+  }
+};
+
+deps['fedora-arm64'] = {
+  tools: [...deps['fedora-x64'].tools],
+  chromium: [...deps['fedora-x64'].chromium],
+  firefox: [...deps['fedora-x64'].firefox],
+  webkit: [...deps['fedora-x64'].webkit],
+  lib2package: {
+    ...deps['fedora-x64'].lib2package,
   },
 };
 

@@ -75,6 +75,17 @@ function isSupportedWindowsVersion(): boolean {
 
 export type DependencyGroup = 'chromium' | 'firefox' | 'webkit' | 'tools';
 
+type LinuxPackageManager = 'apt' | 'dnf';
+
+async function detectLinuxPackageManager(): Promise<LinuxPackageManager> {
+  // Prefer dnf on RHEL-family systems; fall back to apt-get elsewhere. We only
+  // probe once per process — Playwright pivots on hostPlatform for everything else.
+  const dnf = await spawnAsync('which', ['dnf']);
+  if (dnf.code === 0)
+    return 'dnf';
+  return 'apt';
+}
+
 export async function installDependenciesWindows(targets: Set<DependencyGroup>, dryRun: boolean): Promise<void> {
   if (targets.has('chromium')) {
     const command = 'powershell.exe';
@@ -103,16 +114,23 @@ export async function installDependenciesLinux(targets: Set<DependencyGroup>, dr
     libraries.push(...info[target]);
   }
   const uniqueLibraries = Array.from(new Set(libraries));
+  const pm = await detectLinuxPackageManager();
   if (dryRun) {
-    await reportMissingDependenciesLinux(uniqueLibraries);
+    await reportMissingDependenciesLinux(uniqueLibraries, pm);
     return;
   }
   console.log(`Installing dependencies...`);  // eslint-disable-line no-console
   const commands: string[] = [];
-  commands.push('apt-get update');
-  commands.push(['apt-get', 'install', '-y', '--no-install-recommends',
-    ...uniqueLibraries,
-  ].join(' '));
+  if (pm === 'dnf') {
+    commands.push(['dnf', 'install', '-y',
+      ...uniqueLibraries,
+    ].join(' '));
+  } else {
+    commands.push('apt-get update');
+    commands.push(['apt-get', 'install', '-y', '--no-install-recommends',
+      ...uniqueLibraries,
+    ].join(' '));
+  }
   const { command, args, elevatedPermissions } = await transformCommandsForRoot(commands);
   if (elevatedPermissions)
     console.log('Switching to root user to install dependencies...'); // eslint-disable-line no-console
@@ -123,7 +141,20 @@ export async function installDependenciesLinux(targets: Set<DependencyGroup>, dr
   });
 }
 
-async function reportMissingDependenciesLinux(packages: string[]) {
+async function reportMissingDependenciesLinux(packages: string[], pm: LinuxPackageManager) {
+  const missingPackages = pm === 'dnf'
+    ? await reportMissingDnfPackages(packages)
+    : await reportMissingAptPackages(packages);
+  if (!missingPackages.length) {
+    console.log('All system dependencies are installed.'); // eslint-disable-line no-console
+    return;
+  }
+  // eslint-disable-next-line no-console
+  console.log(`Missing system dependencies (${missingPackages.length}):\n${missingPackages.sort().map(p => `  ${p}`).join('\n')}`);
+  process.exitCode = 1;
+}
+
+async function reportMissingAptPackages(packages: string[]): Promise<string[]> {
   // `apt-get install -s` simulates the install: it does not need root and does not
   // modify the system. Stdout includes one `Inst <package> ...` line per package
   // that would be installed (i.e. that is currently missing).
@@ -138,13 +169,21 @@ async function reportMissingDependenciesLinux(packages: string[]) {
     if (match)
       missingPackages.push(match[1]);
   }
-  if (!missingPackages.length) {
-    console.log('All system dependencies are installed.'); // eslint-disable-line no-console
-    return;
+  return missingPackages;
+}
+
+async function reportMissingDnfPackages(packages: string[]): Promise<string[]> {
+  // `rpm -q` exits non-zero when any of the queried packages are not installed
+  // and prints "package <name> is not installed" lines for each missing one.
+  // It does not need root.
+  const { stdout } = await spawnAsync('rpm', ['-q', ...packages], {});
+  const missingPackages: string[] = [];
+  for (const line of stdout.split('\n')) {
+    const match = /^package (\S+) is not installed$/.exec(line.trim());
+    if (match)
+      missingPackages.push(match[1]);
   }
-  // eslint-disable-next-line no-console
-  console.log(`Missing system dependencies (${missingPackages.length}):\n${missingPackages.sort().map(p => `  ${p}`).join('\n')}`);
-  process.exitCode = 1;
+  return missingPackages;
 }
 
 export async function validateDependenciesWindows(sdkLanguage: string, windowsExeAndDllDirectories: string[]) {
@@ -243,6 +282,9 @@ export async function validateDependenciesLinux(sdkLanguage: string, linuxLddDir
   }
 
   const maybeSudo = process.getuid?.() && os.platform() !== 'win32' ? 'sudo ' : '';
+  const pm = await detectLinuxPackageManager();
+  const pmLabel = pm === 'dnf' ? 'dnf' : 'apt';
+  const pmInstallPrefix = pm === 'dnf' ? 'dnf install' : 'apt-get install';
   const dockerInfo = readDockerVersionSync();
   const errorLines = [
     `Host system is missing dependencies to run browsers.`,
@@ -265,9 +307,9 @@ export async function validateDependenciesLinux(sdkLanguage: string, linuxLddDir
       ``,
       `    ${maybeSudo}${buildPlaywrightCLICommand(sdkLanguage, 'install-deps')}`,
       ``,
-      `- (alternative 2) use apt inside Docker:`,
+      `- (alternative 2) use ${pmLabel} inside Docker:`,
       ``,
-      `    ${maybeSudo}apt-get install ${[...missingPackages].join('\\\n        ')}`,
+      `    ${maybeSudo}${pmInstallPrefix} ${[...missingPackages].join('\\\n        ')}`,
       ``,
       `<3 Playwright Team`,
     ]);
@@ -279,8 +321,8 @@ export async function validateDependenciesLinux(sdkLanguage: string, linuxLddDir
       ``,
       `    ${maybeSudo}${buildPlaywrightCLICommand(sdkLanguage, 'install-deps')}`,
       ``,
-      `Alternatively, use apt:`,
-      `    ${maybeSudo}apt-get install ${[...missingPackages].join('\\\n        ')}`,
+      `Alternatively, use ${pmLabel}:`,
+      `    ${maybeSudo}${pmInstallPrefix} ${[...missingPackages].join('\\\n        ')}`,
       ``,
       `<3 Playwright Team`,
     ]);

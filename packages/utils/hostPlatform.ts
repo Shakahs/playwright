@@ -35,6 +35,7 @@ export type HostPlatform = 'win64' |
                            'debian11-x64' | 'debian11-arm64' |
                            'debian12-x64' | 'debian12-arm64' |
                            'debian13-x64' | 'debian13-arm64' |
+                           'fedora-x64' | 'fedora-arm64' |
                            '<unknown>';
 
 function calculatePlatform(): { hostPlatform: HostPlatform, isOfficiallySupportedPlatform: boolean } {
@@ -103,6 +104,12 @@ function calculatePlatform(): { hostPlatform: HostPlatform, isOfficiallySupporte
       if (mintMajor === 21)
         return { hostPlatform: ('ubuntu22.04' + archSuffix) as HostPlatform, isOfficiallySupportedPlatform: false };
       return { hostPlatform: ('ubuntu24.04' + archSuffix) as HostPlatform, isOfficiallySupportedPlatform: false };
+    }
+    // RHEL family (Fedora, RHEL, Rocky, AlmaLinux, CentOS) — all use dnf/rpm with
+    // the same package names for the libraries we care about.
+    if (distroInfo?.id === 'fedora' || distroInfo?.id === 'rhel' || distroInfo?.id === 'rocky' || distroInfo?.id === 'almalinux' || distroInfo?.id === 'centos') {
+      const isOfficiallySupportedPlatform = distroInfo?.id === 'fedora';
+      return { hostPlatform: ('fedora' + archSuffix) as HostPlatform, isOfficiallySupportedPlatform };
     }
     if (distroInfo?.id === 'debian' || distroInfo?.id === 'raspbian') {
       const isOfficiallySupportedPlatform = distroInfo?.id === 'debian';
