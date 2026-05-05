@@ -1,0 +1,63 @@
+name: "tests Fedora"
+
+on:
+  push:
+    branches:
+      - main
+      - release-*
+  pull_request:
+    paths-ignore:
+      - 'browser_patches/**'
+      - 'docs/**'
+      - 'packages/extension/**'
+      - 'packages/playwright-core/src/server/bidi/**'
+      - 'packages/playwright-core/src/tools/**'
+      - 'tests/bidi/**'
+      - 'tests/extension/**'
+      - 'tests/mcp/**'
+    branches:
+      - main
+      - release-*
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+env:
+  FORCE_COLOR: 1
+  ELECTRON_SKIP_BINARY_DOWNLOAD: 1
+
+jobs:
+  # Runs inside a Fedora container on a stock ubuntu-latest runner. The container
+  # runs as root, so installDependenciesLinux skips sudo and exercises the dnf
+  # branch directly. Prerequisites for actions/checkout (git) and actions/setup-node
+  # (tar, xz) plus the container deps for the test step (xvfb-run, sudo for
+  # transformCommandsForRoot's `which sudo` probe) are installed in the first step.
+  test_fedora_chromium:
+    name: fedora-${{ matrix.fedora-version }} (chromium)
+    runs-on: ubuntu-latest
+    container:
+      image: fedora:${{ matrix.fedora-version }}
+    strategy:
+      fail-fast: false
+      matrix:
+        fedora-version: ['44']
+    steps:
+      - name: Install container prerequisites
+        run: |
+          dnf install -y --setopt=install_weak_deps=False \
+            tar gzip xz git which xorg-x11-server-Xvfb sudo nodejs-npm
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: npm ci
+        run: npm ci
+      - name: npm run build
+        run: npm run build
+      - name: npx playwright install --with-deps
+        run: npx playwright install --with-deps chromium
+      - name: Run chromium tests
+        run: xvfb-run --auto-servernum --server-args="-screen 0 1280x960x24" -- npm run test -- --project=chromium-*
+        env:
+          PW_TAG: "@chromium-fedora-${{ matrix.fedora-version }}"
